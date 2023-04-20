@@ -1,31 +1,26 @@
-#Stage 1 - Install dependencies and build the app
-FROM debian:latest AS build-env
+# 빌드 스테이지
+FROM ghcr.io/cirruslabs/flutter:3.10.0-1.1.pre AS build-stage
 
-# Install flutter dependencies
-RUN apt-get update 
-RUN apt-get install -y curl git wget unzip libgconf-2-4 gdb libstdc++6 libglu1-mesa fonts-droid-fallback lib32stdc++6 python3
-RUN apt-get clean
+# 앱 코드 복사
+WORKDIR /app
+COPY . .
 
-# Clone the flutter repo
-RUN git clone https://github.com/flutter/flutter.git /usr/local/flutter
-
-# Set flutter path
-# RUN /usr/local/flutter/bin/flutter doctor -v
-ENV PATH="/usr/local/flutter/bin:/usr/local/flutter/bin/cache/dart-sdk/bin:${PATH}"
-
-# Run flutter doctor
-RUN flutter doctor -v
-# Enable flutter web
-RUN flutter channel master
-RUN flutter upgrade
-RUN flutter config --enable-web
-
-# Copy files to container and build
-RUN mkdir /app/
-COPY . /app/
-WORKDIR /app/
+# 앱 빌드
 RUN flutter build web
 
-# Stage 2 - Create the run-time image
-FROM nginx:1.21.1-alpine
-COPY --from=build-env /app/build/web /usr/share/nginx/html
+# 런타임 스테이지
+FROM nginx:1.21.4-alpine AS runtime-stage
+
+# Nginx 설정 파일 수정
+RUN rm /etc/nginx/conf.d/default.conf
+COPY web/nginx.conf /etc/nginx/conf.d
+
+# 앱 빌드 결과물 복사
+COPY --from=build-stage /app/build/web /usr/share/nginx/html
+
+# 포트 설정
+ENV PORT 8080
+EXPOSE 8080
+
+# Nginx 실행
+CMD ["nginx", "-g", "daemon off;"]
